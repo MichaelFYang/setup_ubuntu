@@ -104,6 +104,10 @@ chmod +x setup_macos.sh
 
 Both scripts write shell configuration to `~/.config/zsh/setup.zsh` and add a single source line to `~/.zshrc`. This design survives tools like conda and nvm that rewrite `~/.zshrc`. To customize after installation, edit `~/.config/zsh/setup.zsh`. The Starship prompt config lives at `~/.config/starship.toml`.
 
+## Acknowledgments
+
+Built with the assistance of [Claude](https://claude.ai) by Anthropic.
+
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
