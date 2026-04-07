@@ -12,7 +12,7 @@ echo ""
 echo "── 1/8  Zsh ────────────────────────────────────────────"
 if ! command -v zsh &>/dev/null; then
   sudo apt install -y zsh
-  chsh -s "$(which zsh)"
+  sudo chsh -s "$(which zsh)" "$USER"
   echo "✓ Zsh installed — will be default shell after logout/login"
 else
   echo "✓ Already installed"
@@ -25,20 +25,32 @@ echo "✓ Done"
 
 echo ""
 echo "── 3/8  Starship (prompt) ──────────────────────────────"
-curl -sS https://starship.rs/install.sh | sh -s -- --yes
-echo "✓ Starship installed"
+if command -v starship &>/dev/null; then
+  echo "✓ Already installed ($(starship --version 2>&1 | head -1))"
+else
+  curl -sS https://starship.rs/install.sh | sh -s -- --yes
+  echo "✓ Starship installed"
+fi
 
 echo ""
 echo "── 4/8  eza (modern ls) ────────────────────────────────"
-sudo apt install -y gpg
-sudo mkdir -p /etc/apt/keyrings
-wget -qO- https://raw.githubusercontent.com/eza-community/eza/main/deb.asc \
-  | sudo gpg --batch --yes --dearmor -o /etc/apt/keyrings/gierens.gpg
-echo "deb [signed-by=/etc/apt/keyrings/gierens.gpg] http://deb.gierens.de stable main" \
-  | sudo tee /etc/apt/sources.list.d/gierens.list > /dev/null
-sudo chmod 644 /etc/apt/keyrings/gierens.gpg /etc/apt/sources.list.d/gierens.list
-sudo apt update -qq && sudo apt install -y eza
-echo "✓ eza installed"
+if command -v eza &>/dev/null; then
+  echo "✓ Already installed"
+else
+  sudo apt install -y gpg
+  sudo mkdir -p /etc/apt/keyrings
+  if wget -qO- https://raw.githubusercontent.com/eza-community/eza/main/deb.asc \
+    | sudo gpg --batch --yes --dearmor -o /etc/apt/keyrings/gierens.gpg; then
+    echo "deb [signed-by=/etc/apt/keyrings/gierens.gpg] http://deb.gierens.de stable main" \
+      | sudo tee /etc/apt/sources.list.d/gierens.list > /dev/null
+    sudo chmod 644 /etc/apt/keyrings/gierens.gpg /etc/apt/sources.list.d/gierens.list
+    sudo apt update -qq
+    sudo apt install -y eza
+    echo "✓ eza installed"
+  else
+    echo "⚠ eza: GPG key download failed, skipping"
+  fi
+fi
 
 echo ""
 echo "── 5/8  bat (modern cat) ───────────────────────────────"
@@ -67,39 +79,81 @@ echo "✓ Plugins installed"
 echo ""
 echo "── 8/8  tree + broot ───────────────────────────────────"
 sudo apt install -y tree
-# broot — download latest binary
-BROOT_URL=$(curl -s https://api.github.com/repos/Canop/broot/releases/latest \
-  | grep '"browser_download_url"' \
-  | grep 'x86_64-unknown-linux-musl' \
-  | head -1 \
-  | cut -d'"' -f4)
-if [ -n "$BROOT_URL" ]; then
-  curl -sL "$BROOT_URL" -o /tmp/broot
-  chmod +x /tmp/broot
-  sudo mv /tmp/broot /usr/local/bin/broot
-  broot --install
-  echo "✓ tree + broot installed"
+echo "✓ tree installed"
+# broot — skip if a valid ELF binary is already installed
+BROOT_BIN=$(command -v broot 2>/dev/null || true)
+if [ -n "$BROOT_BIN" ] && file "$BROOT_BIN" 2>/dev/null | grep -q 'ELF.*executable'; then
+  echo "✓ broot already installed ($BROOT_BIN)"
 else
-  echo "⚠ broot: could not find download URL, skipping (install manually later)"
-  echo "✓ tree installed"
+  # Remove corrupt/non-ELF leftover if present (e.g. a failed download wrote HTML)
+  [ -n "$BROOT_BIN" ] && sudo rm -f "$BROOT_BIN"
+  # Derive latest version from the redirect URL — avoids GitHub API rate limits
+  BROOT_VERSION=$(curl -sIL -o /dev/null -w '%{url_effective}' \
+    https://github.com/Canop/broot/releases/latest \
+    | grep -oP 'v[\d.]+$')
+  if [ -n "$BROOT_VERSION" ]; then
+    # Detect architecture
+    BROOT_ARCH=$(uname -m)
+    case "$BROOT_ARCH" in
+      x86_64)  BROOT_TARGET="x86_64-unknown-linux-musl" ;;
+      aarch64) BROOT_TARGET="aarch64-unknown-linux-gnu" ;;
+      *)       BROOT_TARGET="" ;;
+    esac
+    if [ -z "$BROOT_TARGET" ]; then
+      echo "⚠ broot: unsupported architecture $BROOT_ARCH, skipping (run: cargo install broot)"
+    else
+      # Zip filename uses version without the leading 'v' (e.g. v1.56.2 → broot_1.56.2.zip)
+      BROOT_VER="${BROOT_VERSION#v}"
+      BROOT_URL="https://github.com/Canop/broot/releases/download/${BROOT_VERSION}/broot_${BROOT_VER}.zip"
+      echo "  Downloading broot ${BROOT_VERSION} (${BROOT_ARCH})..."
+      curl -sL "$BROOT_URL" -o /tmp/broot.zip
+      unzip -qo /tmp/broot.zip "${BROOT_TARGET}/broot" -d /tmp/broot_extracted
+      if file "/tmp/broot_extracted/${BROOT_TARGET}/broot" | grep -q 'ELF.*executable'; then
+        chmod +x "/tmp/broot_extracted/${BROOT_TARGET}/broot"
+        sudo mv "/tmp/broot_extracted/${BROOT_TARGET}/broot" /usr/local/bin/broot
+        rm -rf /tmp/broot.zip /tmp/broot_extracted
+        # --install creates the launcher script (~/.config/broot/launcher/bash/br)
+        # but also patches .zshrc/.bashrc directly with hardcoded absolute paths.
+        # We undo that: setup.zsh already sources the launcher with $HOME.
+        broot --install || true
+        sed -i '/broot\/launcher/d' "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.bash_profile" 2>/dev/null || true
+        echo "✓ broot ${BROOT_VERSION} installed"
+      else
+        rm -rf /tmp/broot.zip /tmp/broot_extracted
+        echo "⚠ broot: extracted file is not a valid binary"
+        echo "  Install manually: cargo install broot"
+      fi
+    fi
+  else
+    echo "⚠ broot: could not determine latest version, skipping (run: cargo install broot)"
+  fi
 fi
 
 echo ""
 echo "── Nerd Font (JetBrainsMono) ───────────────────────────"
-FONT_DIR="$HOME/.local/share/fonts"
-mkdir -p "$FONT_DIR"
-curl -sL "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/JetBrainsMono.zip" \
-  -o /tmp/JetBrainsMono.zip
-unzip -qo /tmp/JetBrainsMono.zip -d "$FONT_DIR/JetBrainsMono"
-fc-cache -fq
-echo "✓ JetBrainsMono Nerd Font installed"
+if fc-list | grep -qi "JetBrainsMono.*Nerd"; then
+  echo "✓ Already installed"
+else
+  FONT_DIR="$HOME/.local/share/fonts"
+  mkdir -p "$FONT_DIR"
+  curl -sL "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/JetBrainsMono.zip" \
+    -o /tmp/JetBrainsMono.zip
+  unzip -qo /tmp/JetBrainsMono.zip -d "$FONT_DIR/JetBrainsMono"
+  fc-cache -f
+  echo "✓ JetBrainsMono Nerd Font installed"
+fi
 
 echo ""
-echo "── Writing ~/.zshrc ────────────────────────────────────"
-# Back up existing .zshrc if present
-[ -f ~/.zshrc ] && cp ~/.zshrc ~/.zshrc.bak && echo "  (backed up existing .zshrc to .zshrc.bak)"
+echo "── Writing shell config ────────────────────────────────"
+# Strategy: write our config to a dedicated file (~/.config/zsh/setup.zsh)
+# and only add a single source line to ~/.zshrc.
+# This way tools like conda/nvm/rustup that rewrite ~/.zshrc won't destroy
+# our configuration — they only append their own blocks, leaving the source
+# line intact.
+SETUP_ZSH="$HOME/.config/zsh/setup.zsh"
+mkdir -p "$HOME/.config/zsh"
 
-cat > ~/.zshrc << 'EOF'
+cat > "$SETUP_ZSH" << 'EOF'
 # ─────────────────────────────────────────────────────────────
 #  PATH
 # ─────────────────────────────────────────────────────────────
@@ -233,12 +287,24 @@ ZSH_AUTOSUGGEST_STRATEGY=(history completion)
 # export CYCLONEDDS_URI=/home/fanyang1/cyclonedds_ros2.xml
 
 # ─────────────────────────────────────────────────────────────
-#  Starship prompt (must be last, before conda)
+#  Starship prompt (must be last)
 # ─────────────────────────────────────────────────────────────
 if command -v starship &>/dev/null; then
   eval "$(starship init zsh)"
 fi
 EOF
+echo "✓ Shell config written to $SETUP_ZSH"
+
+# Add source line to ~/.zshrc only if not already present (idempotent)
+SOURCE_LINE="[ -f \"\$HOME/.config/zsh/setup.zsh\" ] && source \"\$HOME/.config/zsh/setup.zsh\""
+if ! grep -qF '.config/zsh/setup.zsh' "$HOME/.zshrc" 2>/dev/null; then
+  # Prepend the source line so it loads before conda/nvm/etc blocks
+  tmp=$(mktemp)
+  echo "$SOURCE_LINE" | cat - "$HOME/.zshrc" 2>/dev/null > "$tmp" && mv "$tmp" "$HOME/.zshrc" || echo "$SOURCE_LINE" > "$HOME/.zshrc"
+  echo "✓ Added source line to ~/.zshrc"
+else
+  echo "✓ ~/.zshrc already sources setup.zsh — no changes needed"
+fi
 
 echo ""
 echo "── Copying Starship config ─────────────────────────────"
@@ -311,28 +377,45 @@ echo "✓ Starship config written"
 
 echo ""
 echo "── Conda (init for zsh) ──────────────────────────────────"
-if [ -d "$HOME/anaconda3" ]; then
-  # Append conda init block directly (avoids conda init zsh clobbering .zshrc)
-  cat >> ~/.zshrc << 'CONDA_EOF'
+# Detect conda prefix: anaconda3 or miniconda3 (or custom CONDA_PREFIX)
+CONDA_PREFIX_DIR=""
+for candidate in "$HOME/anaconda3" "$HOME/miniconda3" "$HOME/miniforge3" "$HOME/mambaforge"; do
+  if [ -d "$candidate" ]; then
+    CONDA_PREFIX_DIR="$candidate"
+    break
+  fi
+done
 
+if [ -n "$CONDA_PREFIX_DIR" ]; then
+  if grep -q 'conda initialize' "$SETUP_ZSH" 2>/dev/null; then
+    echo "✓ Conda already configured in setup.zsh"
+  else
+  # Write conda init into our dedicated config file (not ~/.zshrc)
+  # so it survives if conda re-runs init later and rewrites ~/.zshrc.
+  cat >> "$SETUP_ZSH" << CONDA_EOF
+
+# ─────────────────────────────────────────────────────────────
+#  Conda ($CONDA_PREFIX_DIR)
+# ─────────────────────────────────────────────────────────────
 # >>> conda initialize >>>
 # !! Contents within this block are managed by 'conda init' !!
-__conda_setup="$("$HOME/anaconda3/bin/conda" 'shell.zsh' 'hook' 2> /dev/null)"
-if [ $? -eq 0 ]; then
-    eval "$__conda_setup"
+__conda_setup="\$('$CONDA_PREFIX_DIR/bin/conda' 'shell.zsh' 'hook' 2> /dev/null)"
+if [ \$? -eq 0 ]; then
+    eval "\$__conda_setup"
 else
-    if [ -f "$HOME/anaconda3/etc/profile.d/conda.sh" ]; then
-        . "$HOME/anaconda3/etc/profile.d/conda.sh"
+    if [ -f "$CONDA_PREFIX_DIR/etc/profile.d/conda.sh" ]; then
+        . "$CONDA_PREFIX_DIR/etc/profile.d/conda.sh"
     else
-        export PATH="$HOME/anaconda3/bin:$PATH"
+        export PATH="$CONDA_PREFIX_DIR/bin:\$PATH"
     fi
 fi
 unset __conda_setup
 # <<< conda initialize <<<
 CONDA_EOF
-  echo "✓ Conda initialized for zsh"
+  echo "✓ Conda initialized for zsh (using $CONDA_PREFIX_DIR)"
+  fi
 else
-  echo "⚠ anaconda3 not found at ~/anaconda3, skipping conda init"
+  echo "⚠ No conda installation found (anaconda3/miniconda3/miniforge3), skipping"
 fi
 
 echo ""
@@ -343,4 +426,7 @@ echo "  Next steps:"
 echo "  1. Log out and back in (or run: zsh) to use Zsh"
 echo "  2. Set terminal font to: JetBrainsMono Nerd Font"
 echo "  3. Run: source ~/.zshrc"
+echo ""
+echo "  Config file: ~/.config/zsh/setup.zsh"
+echo "  (Edit that file to customize — it survives conda/nvm rewrites)"
 echo "─────────────────────────────────────────────────────────"
