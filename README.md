@@ -28,7 +28,7 @@ Starting from a fresh Ubuntu install, this script transforms the default termina
 
 - **`.zshrc`** — History, tab completion, Emacs-style key bindings, and aliases for git, eza, bat, and tree. Includes helper functions: `mkcd`, `extract`, and `f` (quick file search).
 - **`starship.toml`** — Two-line prompt displaying directory, git branch/status, language versions (Python, Node, Rust), command duration, and clock.
-- **Conda** — Appends `conda init` block automatically if `~/anaconda3` is detected.
+- **Conda** — Appends `conda init` block automatically if `~/anaconda3`, `~/miniconda3`, `~/miniforge3`, or `~/mambaforge` is detected.
 - **ROS 2 Jazzy** — Sources the workspace setup if `/opt/ros/jazzy/setup.zsh` exists.
 
 ## Quick Start
@@ -81,12 +81,12 @@ chmod +x setup_ubuntu.sh
 
 ## Requirements
 
-- **Ubuntu 24.04** (should work on other Debian-based distributions with minor adjustments)
+- **Ubuntu 24.04** on **x86_64** or **aarch64** (should work on other Debian-based distributions with minor adjustments)
 - **sudo** access for package installation
 
 ## Customization
 
-The script writes `~/.zshrc` and `~/.config/starship.toml` directly. To customize after installation, edit those files. If you re-run the script, the existing `.zshrc` is backed up to `.zshrc.bak` before being overwritten.
+The script writes all shell configuration to `~/.config/zsh/setup.zsh` and adds a single source line to `~/.zshrc`. This design survives tools like conda and nvm that rewrite `~/.zshrc`. To customize after installation, edit `~/.config/zsh/setup.zsh`. The Starship prompt config lives at `~/.config/starship.toml`.
 
 ## License
 
