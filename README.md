@@ -28,7 +28,7 @@ Starting from a fresh install, these scripts transform the default terminal into
 ## What Gets Configured
 
 - **`~/.config/zsh/setup.zsh`** — History, tab completion, Emacs-style key bindings, and aliases for git, eza, bat, and tree. Includes helper functions: `mkcd`, `extract`, and `f` (quick file search). Sourced from `~/.zshrc` via a single line — survives rewrites by conda, nvm, and similar tools.
-- **`~/.config/starship.toml`** — Two-line prompt displaying directory, git branch/status, language versions (Python, Node, Rust), command duration, and clock.
+- **`~/.config/starship.toml`** — Two-line prompt displaying directory, git branch/status, conda environment, language versions (Python, Node, Rust), command duration, and clock.
 - **Conda** — Appends `conda init` block automatically if `~/anaconda3`, `~/miniconda3`, `~/miniforge3`, or `~/mambaforge` is detected.
 - **ROS 2 Jazzy** (Ubuntu only) — Sources the workspace setup if `/opt/ros/jazzy/setup.zsh` exists.
 

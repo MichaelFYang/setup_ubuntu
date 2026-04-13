@@ -61,8 +61,10 @@ else
   echo "✓ bat installed"
 fi
 # Ubuntu installs it as 'batcat' to avoid conflict — ensure 'bat' symlink exists
-mkdir -p ~/.local/bin
-ln -sf /usr/bin/batcat ~/.local/bin/bat
+if [ -f /usr/bin/batcat ]; then
+  mkdir -p ~/.local/bin
+  ln -sf /usr/bin/batcat ~/.local/bin/bat
+fi
 
 echo ""
 echo "── 6/8  fzf (fuzzy finder) ─────────────────────────────"
@@ -70,6 +72,8 @@ if [ -d ~/.fzf ]; then
   # Ensure zsh integration is generated for git-clone install
   ~/.fzf/install --all --no-bash --no-fish --no-update-rc 2>/dev/null || true
   echo "✓ Already installed (via git clone) — zsh keybindings generated"
+elif command -v fzf &>/dev/null; then
+  echo "✓ Already installed"
 else
   sudo apt install -y fzf
   echo "✓ fzf installed — ctrl+r: history search, ctrl+t: file search"
@@ -151,6 +155,7 @@ else
   curl -sL "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/JetBrainsMono.zip" \
     -o /tmp/JetBrainsMono.zip
   unzip -qo /tmp/JetBrainsMono.zip -d "$FONT_DIR/JetBrainsMono"
+  rm -f /tmp/JetBrainsMono.zip
   fc-cache -f
   echo "✓ JetBrainsMono Nerd Font installed"
 fi
@@ -184,6 +189,7 @@ setopt HIST_IGNORE_DUPS HIST_IGNORE_SPACE HIST_VERIFY SHARE_HISTORY EXTENDED_HIS
 # ─────────────────────────────────────────────────────────────
 autoload -Uz compinit && compinit
 zstyle ':completion:*' menu select
+zstyle ':completion:*' list-colors "${(s.:.)LS_COLORS}"
 zstyle ':completion:*' matcher-list 'm:{a-z}={A-Z}'
 zstyle ':completion:*:descriptions' format '%F{yellow}-- %d --%f'
 setopt AUTO_CD CORRECT
@@ -208,10 +214,12 @@ bindkey '^[[1;5D' backward-word
 # ─────────────────────────────────────────────────────────────
 alias ..='cd ..'
 alias ...='cd ../..'
+alias ....='cd ../../..'
 alias ~='cd ~'
 alias -- -='cd -'
 alias reload='source ~/.zshrc && echo "  zshrc reloaded"'
 alias path='echo $PATH | tr ":" "\n"'
+alias myip='curl -s ifconfig.me && echo'
 
 # ─────────────────────────────────────────────────────────────
 #  ALIASES — git
@@ -266,6 +274,11 @@ extract() {
 #  fzf — fuzzy finder (ctrl+r: history, ctrl+t: files)
 # ─────────────────────────────────────────────────────────────
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
+# Fallback for apt-installed fzf (keybindings live under /usr/share/doc/fzf/examples/)
+if [ ! -f ~/.fzf.zsh ] && [ -d /usr/share/doc/fzf/examples ]; then
+  [ -f /usr/share/doc/fzf/examples/key-bindings.zsh ] && source /usr/share/doc/fzf/examples/key-bindings.zsh
+  [ -f /usr/share/doc/fzf/examples/completion.zsh ] && source /usr/share/doc/fzf/examples/completion.zsh
+fi
 export FZF_DEFAULT_OPTS="--height 40% --layout=reverse --border --color=dark"
 
 # ─────────────────────────────────────────────────────────────
@@ -307,6 +320,12 @@ fi
 EOF
 echo "✓ Shell config written to $SETUP_ZSH"
 
+# Back up existing .zshrc if present (only on first run — don't overwrite previous backup)
+if [ -f ~/.zshrc ] && [ ! -f ~/.zshrc.bak ]; then
+  cp ~/.zshrc ~/.zshrc.bak
+  echo "  (backed up existing .zshrc to .zshrc.bak)"
+fi
+
 # Add source line to ~/.zshrc only if not already present (idempotent)
 SOURCE_LINE="[ -f \"\$HOME/.config/zsh/setup.zsh\" ] && source \"\$HOME/.config/zsh/setup.zsh\""
 if ! grep -qF '.config/zsh/setup.zsh' "$HOME/.zshrc" 2>/dev/null; then
@@ -319,13 +338,13 @@ else
 fi
 
 echo ""
-echo "── Copying Starship config ─────────────────────────────"
+echo "── Writing Starship config ─────────────────────────────"
 mkdir -p ~/.config
 cat > ~/.config/starship.toml << 'STARSHIP_EOF'
 "$schema" = 'https://starship.rs/config-schema.json'
 
 format = """
-[╭─](bold 240) $directory$git_branch$git_status$python$nodejs$rust $time
+[╭─](bold 240) $directory$git_branch$git_status$conda$python$nodejs$rust $time
 [╰─❯](bold green) """
 
 right_format = "$cmd_duration$status"
@@ -369,6 +388,10 @@ symbol = "✘ "
 style = "bold red"
 not_executable_symbol = "🔒 "
 not_found_symbol = "🔍 "
+
+[conda]
+style = "bold green"
+format = "[$symbol$environment]($style) "
 
 [python]
 symbol = " "

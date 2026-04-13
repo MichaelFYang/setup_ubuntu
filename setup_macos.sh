@@ -1,6 +1,6 @@
 #!/bin/zsh
 # Premium macOS dev environment setup
-# Run: chmod +x setup.sh && ./setup.sh
+# Run: chmod +x setup_macos.sh && ./setup_macos.sh
 
 set -e
 
@@ -17,38 +17,70 @@ fi
 
 echo ""
 echo "── 2/10  Starship (prompt) ──────────────────────────────"
-brew install starship
-echo "✓ Starship installed"
+if command -v starship &>/dev/null; then
+  echo "✓ Already installed ($(starship --version 2>&1 | head -1))"
+else
+  brew install starship
+  echo "✓ Starship installed"
+fi
 
 echo ""
 echo "── 3/10  fzf (fuzzy finder) ─────────────────────────────"
-brew install fzf
-"$(brew --prefix)/opt/fzf/install" --key-bindings --completion --no-update-rc --no-bash --no-fish
-echo "✓ fzf installed — ctrl+r: history search, ctrl+t: file search"
+if command -v fzf &>/dev/null; then
+  echo "✓ Already installed"
+else
+  brew install fzf
+  echo "✓ fzf installed"
+fi
+# Ensure zsh keybindings are generated (safe to re-run)
+FZF_INSTALL="$(brew --prefix)/opt/fzf/install"
+[ -x "$FZF_INSTALL" ] && "$FZF_INSTALL" --key-bindings --completion --no-update-rc --no-bash --no-fish 2>/dev/null || true
+echo "  ctrl+r: history search, ctrl+t: file search"
 
 echo ""
 echo "── 4/10  eza (modern ls) ────────────────────────────────"
-brew install eza
-echo "✓ eza installed"
+if command -v eza &>/dev/null; then
+  echo "✓ Already installed"
+else
+  brew install eza
+  echo "✓ eza installed"
+fi
 
 echo ""
 echo "── 5/10  bat (modern cat) ───────────────────────────────"
-brew install bat
-echo "✓ bat installed"
+if command -v bat &>/dev/null; then
+  echo "✓ Already installed"
+else
+  brew install bat
+  echo "✓ bat installed"
+fi
 
 echo ""
 echo "── 6/10  zsh-syntax-highlighting ────────────────────────"
-brew install zsh-syntax-highlighting
-echo "✓ Commands turn green when valid, red when not found"
+if [ -f /opt/homebrew/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ]; then
+  echo "✓ Already installed"
+else
+  brew install zsh-syntax-highlighting
+  echo "✓ Commands turn green when valid, red when not found"
+fi
 
 echo ""
 echo "── 7/10  zsh-autosuggestions ────────────────────────────"
-brew install zsh-autosuggestions
-echo "✓ Ghost-text history suggestions — press → to accept"
+if [ -f /opt/homebrew/share/zsh-autosuggestions/zsh-autosuggestions.zsh ]; then
+  echo "✓ Already installed"
+else
+  brew install zsh-autosuggestions
+  echo "✓ Ghost-text history suggestions — press → to accept"
+fi
 
 echo ""
 echo "── 8/10  delta (git diff viewer) ────────────────────────"
-brew install git-delta
+if command -v delta &>/dev/null; then
+  echo "✓ Already installed"
+else
+  brew install git-delta
+  echo "✓ delta installed"
+fi
 # Configure delta only if not already set (preserve user's existing pager)
 if [ "$(git config --global core.pager)" != "delta" ]; then
   git config --global core.pager delta
@@ -56,28 +88,41 @@ if [ "$(git config --global core.pager)" != "delta" ]; then
   git config --global delta.side-by-side true
   git config --global delta.line-numbers true
   git config --global delta.syntax-theme TwoDark
-  echo "✓ delta installed and configured"
+  echo "  delta configured as git pager"
 else
-  echo "✓ delta already configured"
+  echo "  delta already configured as git pager"
 fi
 
 echo ""
 echo "── 9/10  tree (static file tree) ────────────────────────"
-brew install tree
-echo "✓ tree installed"
+if command -v tree &>/dev/null; then
+  echo "✓ Already installed"
+else
+  brew install tree
+  echo "✓ tree installed"
+fi
 
 echo ""
 echo "── 10/10  broot (interactive tree) ──────────────────────"
-brew install broot
+if command -v broot &>/dev/null; then
+  echo "✓ Already installed"
+else
+  brew install broot
+  echo "✓ broot installed"
+fi
 broot --install || true
 # Remove broot's hardcoded .zshrc patches — our setup.zsh already sources the launcher
 sed -i '' '/broot\/launcher/d' "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.bash_profile" 2>/dev/null || true
-echo "✓ broot installed — type 'br' to launch"
+echo "  Type 'br' to launch"
 
 echo ""
 echo "── Nerd Font (JetBrainsMono) ────────────────────────────"
-brew install --cask font-jetbrains-mono-nerd-font
-echo "✓ JetBrainsMono Nerd Font installed"
+if brew list --cask font-jetbrains-mono-nerd-font &>/dev/null; then
+  echo "✓ Already installed"
+else
+  brew install --cask font-jetbrains-mono-nerd-font
+  echo "✓ JetBrainsMono Nerd Font installed"
+fi
 echo "  Set it in: VSCode → Terminal Font Family, or Terminal.app → Preferences → Font"
 
 echo ""
@@ -255,7 +300,7 @@ cat > ~/.config/starship.toml << 'STARSHIP_EOF'
 "$schema" = 'https://starship.rs/config-schema.json'
 
 format = """
-[╭─](bold 240) $directory$git_branch$git_status$python$nodejs$rust $time
+[╭─](bold 240) $directory$git_branch$git_status$conda$python$nodejs$rust $time
 [╰─❯](bold green) """
 
 right_format = "$cmd_duration$status"
@@ -299,6 +344,10 @@ symbol = "✘ "
 style = "bold red"
 not_executable_symbol = "🔒 "
 not_found_symbol = "🔍 "
+
+[conda]
+style = "bold green"
+format = "[$symbol$environment]($style) "
 
 [python]
 symbol = " "
